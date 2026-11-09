@@ -7,6 +7,12 @@ you, accounts, replies, reactions, edits, unread markers and a web client.
 Real IRC clients can connect too. A browser tab and irssi can be signed in to
 the same nick at the same time and see the same conversation.
 
+![#dev in the Day theme](docs/design/swarm-day.webp)
+
+| Sign-in | Dusk |
+| --- | --- |
+| ![The sign-in screen](docs/design/swarm-sign-in.webp) | ![#dev in the Dusk theme](docs/design/swarm-dusk.webp) |
+
 ## Run it
 
 Needs Node.js 22.13 or newer. The only dependency is `ws`; the database is the
@@ -72,6 +78,38 @@ Type `/help` in the web client for the full list of commands. `Ctrl K` jumps
 to any channel or person, `Alt ↑/↓` moves between conversations, and a link
 such as `http://localhost:3000/#dev` opens (and joins) that channel.
 
+## House style: Murmuration
+
+Version 2 gave the web client a look of its own, taken from the name. A
+murmuration is a flock of starlings turning together at dusk.
+
+- **Every person is a dot, and you are the coloured one.** Dots are filled for
+  people who are here, hollow for people who are not. Your own dot, your own
+  lines and whatever is new for you carry the one accent colour.
+- **A channel is a swarm.** Beside each channel name sits one dot per person
+  online, up to nine; past that a number says it better.
+- **The flock is live.** The header of a conversation shows its people as birds
+  that wander together, and a bird swells when that person speaks. On the
+  sign-in screen a thousand of them fly a figure of eight and part around the
+  pointer. Both stand still for anyone who asks for reduced motion, and the
+  header flock can be switched off in the menu.
+- **Two skies.** Day is stone and ink with a signal-blue you; Dusk is
+  near-black and bone with a vermilion you. Without a choice of your own, the
+  system's light or dark setting picks.
+- **Tone, not lines.** The three columns differ by a step in tone. Only what
+  floats (menus, dialogs) casts a shadow. Round is for what you press, 12px for
+  what holds content.
+- **Type.** Schibsted Grotesk for the interface and for what people say; Geist
+  Mono for IRC's two columns, the time and the nick, and for code. Both are
+  bundled under the SIL Open Font License (`public/fonts/LICENSE.txt`), so the
+  client loads nothing from elsewhere.
+
+The interface was designed from generated mock-ups before it was built: a Day
+and a Dusk concept for the chat and one for the sign-in screen, kept in
+`docs/design/` (`concept-day.webp`, `concept-dusk.webp`, `concept-login.webp`).
+The tokens are the custom properties at the top of `public/css/app.css`; the
+mark, the swarms and the flocks are drawn by `public/js/swarm.js`.
+
 ## Connecting with an IRC client
 
 ```
@@ -118,6 +156,8 @@ src/gateways/ws.js   JSON over WebSocket, for the web client
 src/gateways/irc.js  the IRC protocol, for everything else
 src/gateways/http.js static files, /api/info, /healthz
 public/              the web client: plain ES modules, no build step
+public/js/swarm.js   the house style in code: mark, swarm glyphs, live flocks
+docs/design/         concept mock-ups and screenshots
 test/                node:test suites for the hub and both gateways
 ```
 

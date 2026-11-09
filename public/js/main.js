@@ -15,12 +15,22 @@ const chat = $('#chat');
 
 // ------------------------------------------------------------------- theme
 
+// Two skies. Without a choice of your own, the system's light or dark decides.
+const prefersDark = matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
-  root.dataset.theme = app.theme ?? root.dataset.defaultTheme ?? 'dark';
+  const chosen = { day: 'day', dusk: 'dusk', light: 'day', dark: 'dusk' }[app.theme];
+  root.dataset.theme = chosen ?? (prefersDark.matches ? 'dusk' : 'day');
 }
-root.dataset.defaultTheme = root.dataset.theme;
 applyTheme();
 app.on('theme', applyTheme);
+prefersDark.addEventListener('change', () => {
+  applyTheme();
+  app.emit('theme');
+});
+
+const applySettings = () => document.body.classList.toggle('no-flock', !app.settings.flock);
+applySettings();
+app.on('settings', applySettings);
 
 // ------------------------------------------------------------------ phases
 

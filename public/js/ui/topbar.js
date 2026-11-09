@@ -1,8 +1,28 @@
 import { app } from '../app.js';
+import { Flock } from '../swarm.js';
 import { $, fill, h, icon } from './dom.js';
 
 const el = $('#topbar');
 const MODE_WORDS = { m: 'moderated', i: 'invite-only' };
+
+// The conversation's flock: one bird per person who is here, you in colour.
+// It swells where someone speaks. The canvas outlives every redraw of the bar.
+const canvas = h('canvas.topbar-flock', { 'aria-hidden': 'true' });
+const flock = new Flock(canvas);
+
+function birds(buffer) {
+  if (buffer.type === 'channel') {
+    return [...buffer.members.values()]
+      .filter((member) => member.online)
+      .slice(0, 120)
+      .map((member) => ({ id: member.nick.toLowerCase(), self: app.isSelf(member.nick) }));
+  }
+  if (buffer.type === 'dm') {
+    const me = { id: app.self.nick.toLowerCase(), self: true };
+    return buffer.peer?.online ? [me, { id: buffer.key }] : [me];
+  }
+  return [];
+}
 
 function subtitle(buffer) {
   if (buffer.type === 'channel') {
@@ -26,6 +46,7 @@ function render() {
   if (!buffer || !app.self) return;
   const online = [...buffer.members.values()].filter((member) => member.online).length;
   const flags = [...buffer.modes].map((flag) => MODE_WORDS[flag]).filter(Boolean);
+  flock.setBirds(birds(buffer));
   fill(
     el,
     h('button.icon-button.nav-toggle', { type: 'button', 'aria-label': 'Conversations', on: { click: () => document.body.classList.toggle('nav-open') } }, icon('menu', 20)),
@@ -36,6 +57,7 @@ function render() {
       flags.map((flag) => h('span.tag', null, flag)),
       subtitle(buffer),
     ),
+    canvas,
     app.phase === 'reconnecting' && h('p.offline-note', { role: 'status' }, 'Reconnecting…'),
     h(
       'div.topbar-actions',
@@ -56,3 +78,8 @@ function render() {
 }
 
 for (const name of ['active', 'header', 'members', 'phase']) app.on(name, render);
+app.on('items', ({ buffer, kind, item }) => {
+  if (buffer === app.active && kind === 'append' && !item.local) flock.pulse(item.nick.toLowerCase());
+});
+app.on('theme', () => requestAnimationFrame(() => flock.readColours()));
+app.on('settings', () => requestAnimationFrame(() => flock.wake()));

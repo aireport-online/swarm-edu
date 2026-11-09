@@ -1,30 +1,45 @@
 import { app } from '../app.js';
-import { nickHue } from '../format.js';
 import { $, fill, h, icon } from './dom.js';
 import { menu } from './overlay.js';
+import { mark, swarmGlyph } from '../swarm.js';
 
 const el = $('#sidebar');
 const closeDrawer = () => document.body.classList.remove('nav-open');
 
+/** A count only where it asks for an answer: mentions and private messages. */
 function badge(buffer) {
-  if (!buffer.unread) return null;
-  const label = buffer.unread > 99 ? '99+' : String(buffer.unread);
-  return h(`span.badge${buffer.mentions ? '.ping' : ''}`, { 'aria-label': `${buffer.unread} unread` }, label);
+  if (!buffer.mentions) return null;
+  const label = buffer.mentions > 99 ? '99+' : String(buffer.mentions);
+  return h('span.badge', { 'aria-label': `${buffer.mentions} for you` }, label);
+}
+
+/** How many are in a channel right now: a swarm of up to nine dots, then a number. */
+function swarm(buffer) {
+  let online = 0;
+  for (const member of buffer.members.values()) if (member.online) online += 1;
+  const label = `${online} online`;
+  if (online > 9) return h('span.nav-count', { title: label, 'aria-label': label }, String(online));
+  const glyph = swarmGlyph(online);
+  glyph.setAttribute('role', 'img');
+  glyph.setAttribute('aria-label', label);
+  glyph.removeAttribute('aria-hidden');
+  return glyph;
 }
 
 function row(buffer, label = buffer.name) {
   const active = buffer.key === app.activeKey;
   const dm = buffer.type === 'dm';
   return h(
-    `button.nav-row${active ? '.active' : ''}${buffer.unread ? '.unread' : ''}${dm && buffer.peer && !buffer.peer.online ? '.offline' : ''}`,
+    `button.nav-row${active ? '.active' : ''}${buffer.unread ? '.unread' : ''}${dm ? '.dm' : ''}`,
     {
       type: 'button',
       'aria-current': active ? 'page' : null,
       on: { click: () => { app.activate(buffer.key); closeDrawer(); } },
     },
-    dm && h('span.dot', { style: { '--hue': nickHue(buffer.name) } }),
+    dm && h(`span.dot${buffer.peer && !buffer.peer.online ? '.gone' : buffer.peer?.away ? '.away' : ''}`),
     h('span.nav-name', null, label),
     badge(buffer),
+    buffer.type === 'channel' && swarm(buffer),
   );
 }
 
@@ -50,12 +65,16 @@ function selfMenu(anchor) {
       { label: 'Change nick…', run: () => app.emit('compose', { prefill: '/nick ' }) },
       null,
       {
-        label: 'Light theme', checked: document.documentElement.dataset.theme === 'light',
-        run: () => app.setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'),
+        label: 'Dusk theme', checked: document.documentElement.dataset.theme === 'dusk',
+        run: () => app.setTheme(document.documentElement.dataset.theme === 'dusk' ? 'day' : 'dusk'),
       },
       {
         label: 'Notify me of mentions', checked: app.settings.notify,
         run: () => app.emit('toggle-notify'),
+      },
+      {
+        label: 'Flock in the header', checked: app.settings.flock,
+        run: () => app.setSetting('flock', !app.settings.flock),
       },
       {
         label: 'Show joins and leaves', checked: app.settings.showJoins,
@@ -77,7 +96,7 @@ function render() {
     h(
       'div.sidebar-head',
       null,
-      h('p.brand', null, h('span.brand-mark', { 'aria-hidden': 'true' }), h('span.brand-name', null, app.server.name)),
+      h('p.brand', null, mark(), h('span.brand-name', null, app.server.name)),
       h('button.icon-button', { type: 'button', title: 'Jump to… (Ctrl K)', 'aria-label': 'Jump to a channel or person', on: { click: () => app.emit('dialog', 'jump') } }, icon('search')),
     ),
     h(
@@ -88,16 +107,16 @@ function render() {
       h('section.nav-group', null, h('div.nav-heading', null, h('h2', null, 'Server')), row(status, 'Status')),
     ),
     h(
-      'button.self',
-      { type: 'button', 'aria-haspopup': 'menu', on: { click: (event) => selfMenu(event.currentTarget) } },
-      h('span.dot', { style: { '--hue': nickHue(self.nick) } }),
+      'button.self-row',
+      { type: 'button', 'aria-haspopup': 'menu', 'aria-label': `${self.nick}, settings`, on: { click: (event) => selfMenu(event.currentTarget) } },
+      h(`span.dot.self${self.away ? '.away' : ''}`),
       h('span.self-text', null, h('span.self-nick', null, self.nick), h('span.self-state', null, self.away ? `away: ${self.away}` : self.registered ? 'registered' : 'guest')),
       icon('more'),
     ),
   );
 }
 
-for (const name of ['buffers', 'active', 'self', 'settings', 'theme']) app.on(name, render);
+for (const name of ['buffers', 'active', 'self', 'settings', 'theme', 'members']) app.on(name, render);
 app.on('phase', ({ phase }) => {
   if (phase === 'online') render();
 });

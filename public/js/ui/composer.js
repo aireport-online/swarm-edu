@@ -253,11 +253,12 @@ app.on('command', (line) => submit(line));
 function showTyping(buffer) {
   if (buffer !== app.active) return;
   const nicks = [...buffer.typing.values()].map((entry) => entry.nick);
-  typingLine.textContent =
+  const text =
     nicks.length === 0 ? '' :
-    nicks.length === 1 ? `${nicks[0]} is typing…` :
-    nicks.length === 2 ? `${nicks[0]} and ${nicks[1]} are typing…` :
-    'Several people are typing…';
+    nicks.length === 1 ? `${nicks[0]} is typing` :
+    nicks.length === 2 ? `${nicks[0]} and ${nicks[1]} are typing` :
+    'Several people are typing';
+  fill(typingLine, text && h('span.typing-dots', { 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), text);
 }
 app.on('typing', showTyping);
 app.on('buffers', placeholder);

@@ -1,6 +1,6 @@
 {
   "name": "swarm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A modern take on IRC: channels, nicks and slash commands with history, accounts and a web client. Speaks IRC too.",
   "private": true,
   "type": "module",

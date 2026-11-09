@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { after, before, test } from 'node:test';
 import { WebSocket } from 'ws';
@@ -111,7 +112,7 @@ test('http serves the client, its info and nothing outside the public folder', a
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /text\/html/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'self'/);
-  assert.deepEqual(await (await fetch(`${base}/api/info`)).json(), { name: 'Test Net', version: '0.1.0', ircPort: ports.irc });
+  assert.deepEqual(await (await fetch(`${base}/api/info`)).json(), { name: 'Test Net', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, ircPort: ports.irc });
   assert.equal((await (await fetch(`${base}/healthz`)).json()).ok, true);
   assert.equal((await fetch(`${base}/%2e%2e/package.json`)).status, 404);
   assert.equal((await fetch(`${base}/..%2fsrc/server.js`)).status, 404);

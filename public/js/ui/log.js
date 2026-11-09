@@ -1,5 +1,5 @@
 import { app } from '../app.js';
-import { dayKey, formatDay, formatTime, mentions, nickHue, renderText } from '../format.js';
+import { dayKey, formatDay, formatTime, mentions, renderText } from '../format.js';
 import { $, fill, h, icon } from './dom.js';
 import { userMenu } from './members.js';
 import { emojiPicker } from './overlay.js';
@@ -8,7 +8,7 @@ const el = $('#log');
 const jump = $('#jump-latest');
 const GROUP_WITHIN_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 80;
-const GLYPH = { join: '→', part: '←', info: '·', error: '!' };
+const GLYPH = { join: '→', part: '←', info: '', error: '!' };
 
 /** The buffer whose items are in the DOM right now. */
 let shown = null;
@@ -103,8 +103,7 @@ function messageRow(buffer, msg, prev) {
     h(
       'span.who',
       null,
-      h('span.dot', { style: { '--hue': nickHue(msg.nick) } }),
-      h('button.nick', { type: 'button', dataset: { nick: msg.nick }, style: { '--hue': nickHue(msg.nick) } }, msg.nick),
+      h('button.nick', { type: 'button', dataset: { nick: msg.nick } }, msg.nick),
     ),
     body,
     toolbar(buffer, msg),
@@ -116,7 +115,7 @@ function noteRow(buffer, item) {
     `div.row.note.note-${item.kind}`,
     { dataset: { id: item.id } },
     h('time.ts', null, formatTime(item.ts)),
-    h('span.who', { 'aria-hidden': 'true' }, GLYPH[item.kind] ?? '·'),
+    h('span.who', { 'aria-hidden': 'true' }, GLYPH[item.kind] ?? ''),
     h(
       'div.body',
       null,

@@ -1,4 +1,5 @@
 import { app } from '../app.js';
+import { Flock, mark } from '../swarm.js';
 import { $ } from './dom.js';
 
 const form = $('#login-form');
@@ -54,7 +55,20 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+// The sign-in screen's flock: a few hundred birds and, in colour, you.
+const canvas = $('#login-flock');
+const flock = new Flock(canvas, { mode: 'ribbon' });
+flock.populate(innerWidth < 900 ? 420 : 1100);
+canvas.addEventListener('pointermove', (event) => {
+  const box = canvas.getBoundingClientRect();
+  flock.setPointer({ x: event.clientX - box.left, y: event.clientY - box.top });
+});
+canvas.addEventListener('pointerleave', () => flock.setPointer(null));
+app.on('theme', () => requestAnimationFrame(() => flock.readColours()));
+$('#login .brand').prepend(mark());
+
 app.on('phase', ({ phase, message }) => {
+  requestAnimationFrame(() => flock.wake());
   if (phase !== 'login') return;
   if (message) fail(message);
   form.elements.nick.value ||= app.stored.get('nick') ?? '';
@@ -69,7 +83,8 @@ export async function initLogin() {
     document.title = app.info.name;
     if (app.info.ircPort) {
       const irc = $('#login-irc');
-      irc.textContent = `Prefer your own client? Point it at ${location.hostname} port ${app.info.ircPort}.`;
+      irc.textContent = `irc: ${location.hostname}:${app.info.ircPort}`;
+      irc.title = 'Any IRC client can connect here too';
       irc.hidden = false;
     }
   } catch {

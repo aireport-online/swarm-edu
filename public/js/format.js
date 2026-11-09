@@ -1,12 +1,5 @@
 import { h } from './ui/dom.js';
 
-/** A stable hue (0-359) for a nick, so people keep their colour. */
-export function nickHue(nick) {
-  let hash = 0;
-  for (const char of nick.toLowerCase()) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
-  return (hash * 47) % 360;
-}
-
 const pad = (n) => String(n).padStart(2, '0');
 export const formatTime = (ts) => {
   const d = new Date(ts);

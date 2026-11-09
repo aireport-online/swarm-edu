@@ -1,5 +1,4 @@
 import { app } from '../app.js';
-import { nickHue } from '../format.js';
 import { $, fill, h } from './dom.js';
 import { menu } from './overlay.js';
 
@@ -38,7 +37,7 @@ function person(member) {
       title: member.away ? `Away: ${member.away}` : null,
       on: { click: (event) => userMenu(member.nick, event.currentTarget) },
     },
-    h('span.dot', { style: { '--hue': nickHue(member.nick) } }),
+    h(`span.dot${app.isSelf(member.nick) ? '.self' : ''}${!member.online ? '.gone' : member.away ? '.away' : ''}`),
     h('span.person-nick', null, SIGIL[member.role] && h('span.sigil', null, SIGIL[member.role]), member.nick),
   );
 }

@@ -47,7 +47,7 @@ export const app = {
   /** @type {Map<string, object>} */
   buffers: new Map(),
   activeKey: STATUS,
-  settings: { notify: false, showJoins: true, ...stored.get('settings', {}) },
+  settings: { notify: false, showJoins: true, flock: true, ...stored.get('settings', {}) },
   theme: stored.get('theme'),
   stored,
 

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="day">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light dark">
   <title>Swarm</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/css/app.css">
@@ -11,9 +11,10 @@
 </head>
 <body>
   <main class="login" id="login" hidden>
+    <canvas class="login-flock" id="login-flock" aria-hidden="true"></canvas>
     <div class="login-panel">
-      <p class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Swarm</span></p>
-      <h1>Pick a nick and start talking</h1>
+      <p class="brand"><span class="brand-name">Swarm</span></p>
+      <h1>Pick a nick.<br>Join the flock.</h1>
       <p class="login-lead">Channels, nicks and slash commands, with history that waits for you.</p>
       <form id="login-form" autocomplete="on" novalidate>
         <div class="segmented" role="radiogroup" aria-label="How to connect">
