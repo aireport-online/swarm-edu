@@ -3,6 +3,7 @@ import { dayKey, formatDay, formatTime, mentions, renderText } from '../format.j
 import { $, fill, h, icon } from './dom.js';
 import { userMenu } from './members.js';
 import { emojiPicker } from './overlay.js';
+import { pollCard } from './poll.js';
 
 const el = $('#log');
 const jump = $('#jump-latest');
@@ -57,15 +58,19 @@ function reactions(msg) {
 function toolbar(buffer, msg) {
   if (msg.deleted || msg.ephemeral) return null;
   const own = app.isSelf(msg.nick);
-  const op = buffer.members.get(app.self.nick.toLowerCase())?.role === 'op';
+  const op = app.runs(buffer);
+  const inClass = buffer.type === 'channel';
+  const pinned = buffer.pinned?.id === msg.id;
   const button = (act, label, name) => h('button', { type: 'button', title: label, 'aria-label': label, dataset: { act } }, icon(name));
   return h(
     'div.row-actions',
     null,
     button('react', 'React', 'smile'),
     button('reply', 'Reply', 'reply'),
-    own && button('edit', 'Edit', 'edit'),
+    op && button('pin', pinned ? 'Take down from the top' : 'Pin to the top of the class', 'pin'),
+    own && msg.kind !== 'poll' && button('edit', 'Edit', 'edit'),
     (own || op) && button('delete', 'Delete', 'trash'),
+    inClass && !own && !op && button('report', 'Report to your teacher', 'flag'),
   );
 }
 
@@ -91,7 +96,9 @@ function messageRow(buffer, msg, prev) {
   body.append(
     msg.deleted
       ? h('p.text', null, 'message deleted')
-      : h('p.text', null, renderText(msg.text, textContext(buffer)), msg.editedAt && h('span.edited', { title: new Date(msg.editedAt).toLocaleString() }, 'edited')),
+      : msg.poll
+        ? pollCard(buffer, msg)
+        : h('p.text', null, renderText(msg.text, textContext(buffer)), msg.editedAt && h('span.edited', { title: new Date(msg.editedAt).toLocaleString() }, 'edited')),
   );
   const chips = reactions(msg);
   if (chips) body.append(chips);
@@ -243,6 +250,8 @@ el.addEventListener('click', (event) => {
   if (target.matches('.nick')) return userMenu(target.dataset.nick, target);
   if (target.matches('.channel-link')) return app.join(target.dataset.channel);
   if (target.matches('.chip') && msg) return app.run('react', { msgId: msg.id, emoji: target.dataset.emoji });
+  if (target.matches('.poll-option') && msg) return app.run('vote', { msgId: msg.id, choice: Number(target.dataset.choice) });
+  if (target.matches('.poll-close') && msg) return app.run('closePoll', { msgId: msg.id });
   if (target.matches('.reply-ref')) {
     const original = el.querySelector(`.row[data-id="${CSS.escape(target.dataset.ref)}"]`);
     if (!original) return;
@@ -259,6 +268,15 @@ el.addEventListener('click', (event) => {
       return app.emit('compose', { reply: msg });
     case 'edit':
       return app.emit('compose', { edit: msg });
+    case 'pin':
+      return app.run('pin', { channel: buffer.name, msgId: buffer.pinned?.id === msg.id ? null : msg.id });
+    case 'report':
+      if (confirm('Report this message to your teacher? They will see that it came from you; the class will not.')) {
+        app.run('report', { msgId: msg.id }).then((done) => {
+          if (done !== undefined) app.note(buffer, 'info', 'Reported. Your teacher will take a look.');
+        });
+      }
+      return;
     case 'delete':
       if (confirm('Delete this message for everyone?')) app.run('delete', { msgId: msg.id });
   }

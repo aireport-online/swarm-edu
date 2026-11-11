@@ -59,7 +59,10 @@ function cancelContext() {
 function placeholder() {
   const buffer = app.active;
   if (!buffer) return;
-  input.placeholder = buffer.type === 'status' ? 'Type /join #channel, or /help' : `Message ${buffer.name}`;
+  input.placeholder =
+    buffer.type === 'status' ? (app.self?.teacher ? 'Type /class <name> to open a class, or /help' : 'Type /joincode <code> to join a class, or /help') :
+    app.muted(buffer) ? 'Quiet mode. Raise your hand to ask for the floor.' :
+    `Message ${buffer.name}`;
 }
 
 // ---------------------------------------------------------------- commands
@@ -262,6 +265,8 @@ function showTyping(buffer) {
 }
 app.on('typing', showTyping);
 app.on('buffers', placeholder);
+app.on('header', placeholder);
+app.on('members', placeholder);
 
 /** Puts the caret in the message box. */
 export const focusInput = () => input.focus();

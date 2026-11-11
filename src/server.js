@@ -37,7 +37,7 @@ export function createApp(config = loadConfig(), { log = console.error } = {}) {
 
   const http = createHttpServer({
     root: join(here, '..', 'public'),
-    info: () => ({ name: hub.config.serverName, version, ircPort: ports.irc }),
+    info: () => ({ name: hub.config.serverName, version, ircPort: ports.irc, staffCode: Boolean(hub.config.teacherCode) }),
     health: () => ({ ok: true, uptime: Math.round((Date.now() - startedAt) / 1000), ...hub.stats() }),
   });
   // Behind a proxy, the last X-Forwarded-For entry is the one the proxy itself
@@ -78,6 +78,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`  web  http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${ports.http}`);
   if (ports.irc) console.log(`  irc  ${config.host === '0.0.0.0' ? 'localhost' : config.host}:${ports.irc}`);
   console.log(`  data ${config.dbPath}`);
+  if (!config.hub.teacherCode && config.hub.teachers.length === 0 && config.hub.school.onlyTeachersCreate) {
+    console.log('  note: nobody can open a class yet. Set SWARM_TEACHER_CODE (a staff code) or SWARM_TEACHERS (nicks).');
+  }
 
   let stopping = false;
   for (const signal of ['SIGINT', 'SIGTERM']) {

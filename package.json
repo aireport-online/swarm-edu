@@ -1,7 +1,7 @@
 {
-  "name": "swarm",
-  "version": "0.2.0",
-  "description": "A modern take on IRC: channels, nicks and slash commands with history, accounts and a web client. Speaks IRC too.",
+  "name": "swarm-edu",
+  "version": "0.3.0",
+  "description": "Swarm for schools: classes with a code, teachers and students, quiet mode with raised hands, polls and quizzes. Still speaks IRC.",
   "private": true,
   "type": "module",
   "license": "MIT",

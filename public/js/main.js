@@ -6,6 +6,7 @@ import './ui/log.js';
 import { initLogin } from './ui/login.js';
 import './ui/members.js';
 import { closePopover } from './ui/overlay.js';
+import './ui/school.js';
 import './ui/sidebar.js';
 import './ui/topbar.js';
 

@@ -1,17 +1,34 @@
-# Swarm
+# Swarm Edu
 
-A modern take on IRC. Channels, nicks and slash commands, the way IRC has always
-worked, plus the things people now expect from a chat: history that waits for
-you, accounts, replies, reactions, edits, unread markers and a web client.
+[Swarm](https://github.com/aireport-online/swarm), a modern take on IRC, made
+for the classroom. A teacher opens a class and puts its code on the board;
+students type their name and the code and are in. No accounts to hand out, no
+app to install, and any IRC client still works.
 
-Real IRC clients can connect too. A browser tab and irssi can be signed in to
-the same nick at the same time and see the same conversation.
+![A lesson in #history-3b, seen by the teacher](docs/school/teacher.webp)
 
-![#dev in the Day theme](docs/design/swarm-day.webp)
-
-| Sign-in | Dusk |
+| On the board | In a student's hand |
 | --- | --- |
-| ![The sign-in screen](docs/design/swarm-sign-in.webp) | ![#dev in the Dusk theme](docs/design/swarm-dusk.webp) |
+| ![The class code on the board](docs/school/board.webp) | ![Joining, quiet mode and a quiz on a phone](docs/school/phone.webp) |
+
+## What it adds to Swarm
+
+| In the classroom | How it works here |
+| --- | --- |
+| **Classes with a code** | A teacher opens `#history-3b`; it gets a six-character code (no `0/O` or `1/I`). Students join with their name and the code, or through a link such as `https://chat.school.example/#join=K7M2QX`. A new code shuts the old one at once. |
+| **Teachers and students** | Teachers are accounts, made with the school's staff code or named in the configuration. Only teachers open classes. Students join them, as guests or with an account of their own that keeps their classes and messages. |
+| **The board view** | "Show on the board" fills the screen with where to go and what to type, and counts people in as they arrive. |
+| **Quiet mode and hands** | One press and only the teacher writes. Students raise a hand; the hands queue up in order; "Give the floor" lets one student write and lowers the hand. |
+| **Polls and quizzes** | A poll shows its results to everyone who has voted. A quiz has a right answer: nobody but the teacher sees tally or answer until it is closed. |
+| **A pinned message** | The assignment or the rule of the day stays at the top of the class. |
+| **Report to the teacher** | Any student can flag a message. Only the people who run the class see the report and who made it. |
+| **Who took part** | Per class: who wrote how much and when they last spoke, and the transcript as a text file. |
+| **Private messages need a teacher** | A student can write privately to a teacher, never to another student. |
+| **Students see their own classes** | The class list of the school is for teachers. |
+
+Everything Swarm already did is still there: history, replies, reactions,
+edits, unread markers, search, several devices on one name, the Day and Dusk
+themes, and the IRC gateway.
 
 ## Run it
 
@@ -23,112 +40,107 @@ npm install
 ```
 
 ```bash
-npm start
+SWARM_TEACHER_CODE='pick-a-staff-code' npm start
 ```
 
-Then open http://localhost:3000, or point an IRC client at `localhost` port
-`6667`.
+Then open http://localhost:3000.
 
-To look around with some people and conversations already in place:
+1. **A teacher** chooses *Register*, picks a name and a password, and types the
+   staff code. (Someone who registered without it can type
+   `/teacher <staff code>` later.)
+2. The teacher opens a class with the plus beside *Classes*, or `/class
+   history-3b`. Its code is in the top bar; *Show on the board* puts it on the
+   projector.
+3. **Students** open the same address, type their name and the code, and
+   connect.
+
+Without `SWARM_TEACHER_CODE` or `SWARM_TEACHERS` nobody can become a teacher,
+so nobody can open a class; the server says so when it starts.
+
+To look around a school that already has two teachers, ten students, three
+classes and a quiz:
 
 ```bash
 DB_PATH=data/demo.db npm run seed
 ```
 
 ```bash
-DB_PATH=data/demo.db SWARM_ADMINS=ada npm start
+DB_PATH=data/demo.db npm start
 ```
 
-Every demo account (`ada`, `linus`, `grace`, …) has the password `swarm-demo`.
+Every demo account (`ms-rivera`, `mr-okafor`, `noor`, `daan`, …) has the
+password `swarm-demo`; the seed prints the class codes.
 
 With Docker:
 
 ```bash
-docker build -t swarm .
+docker build -t swarm-edu .
 ```
 
 ```bash
-docker run -p 3000:3000 -p 6667:6667 -v swarm-data:/app/data swarm
+docker run -p 3000:3000 -p 6667:6667 -e SWARM_TEACHER_CODE='pick-a-staff-code' -v swarm-edu-data:/app/data swarm-edu
 ```
 
-## How it works for people
+## For teachers
 
-| IRC as you know it | What Swarm adds |
+| You want to | Do this |
 | --- | --- |
-| Pick a nick and you are in; no sign-up | `/register <password>` turns the nick into an account |
-| `#channels`, created by joining them | History is kept; scroll back, search, catch up on unread |
-| Operators `@`, voice `+`, modes `+t +m +i`, kick, ban | Registered members stay in their channels while offline |
-| `/msg`, `/me`, `/topic`, `/whois`, `/away`, … | Replies, emoji reactions, editing and deleting messages |
-| Tab completes nicks; Up recalls what you typed | Private messages between accounts are kept and delivered later |
-| One connection, one client | Several devices on one nick, web and IRC together |
+| Open a class | Plus beside *Classes*, or `/class <name>` |
+| Let students in | Top bar → the code → *Show on the board* or *Copy the join link* |
+| Stop latecomers or strangers | *Lock the class* in the class panel, or `/lock` |
+| Change the code | *New code* in the class panel, or `/code new` |
+| Have the floor to yourself | The *Open / Quiet* button in the top bar, or `/quiet` |
+| Let one student write | Click the name under *Hands up* → *Give the floor*, or `/floor <name>` |
+| Ask the class something | The bars button beside the message box, or `/poll Question \| A \| B` |
+| Ask with a right answer | Mark an option as right, or `/quiz Question \| A \| *B \| C` |
+| Keep a message on top | Hover the message → pin; `/unpin` takes it down |
+| Deal with a report | Class panel → *Reported to you* |
+| See who took part, save the lesson | Class panel → *Who took part* → *Transcript* |
+| Remove or ban someone | Click the name → *Remove from the class* / *Ban* |
+| Share a class with a colleague | Click their name → *Let them run the class* |
 
-A few rules worth knowing:
+Any teacher can walk into any class without its code (unless it is locked);
+they run it only when the class's teacher lets them.
 
-- **Guests** hold a nick only while connected. A short disconnect (20 seconds
-  by default) goes unnoticed; after that the nick is free again.
-- **Channels** exist for as long as they have members. Whoever joins a channel
-  without operators becomes its operator. When the last member leaves, the
-  channel and its history are deleted. The default channel (`#lobby`) is
-  permanent and is run by the nicks listed in `SWARM_ADMINS`.
-- **Private messages** are stored only when both sides are registered. A guest
-  nick may belong to someone else tomorrow and must not inherit a history.
-- **Bans** are on a nick; for a registered nick they follow the account.
+![The class panel: code, quiet mode, lock, reports and who took part](docs/school/class-dialog.webp)
 
-Type `/help` in the web client for the full list of commands. `Ctrl K` jumps
-to any channel or person, `Alt ↑/↓` moves between conversations, and a link
-such as `http://localhost:3000/#dev` opens (and joins) that channel.
+## For students
 
-## House style: Murmuration
+![The sign-in screen](docs/school/sign-in.webp)
 
-Version 2 gave the web client a look of its own, taken from the name. A
-murmuration is a flock of starlings turning together at dusk.
+Type your name and the class code, press *Connect*. In the class:
 
-- **Every person is a dot, and you are the coloured one.** Dots are filled for
-  people who are here, hollow for people who are not. Your own dot, your own
-  lines and whatever is new for you carry the one accent colour.
-- **A channel is a swarm.** Beside each channel name sits one dot per person
-  online, up to nine; past that a number says it better.
-- **The flock is live.** The header of a conversation shows its people as birds
-  that wander together, and a bird swells when that person speaks. On the
-  sign-in screen a thousand of them fly a figure of eight and part around the
-  pointer. Both stand still for anyone who asks for reduced motion, and the
-  header flock can be switched off in the menu.
-- **Two skies.** Day is stone and ink with a signal-blue you; Dusk is
-  near-black and bone with a vermilion you. Without a choice of your own, the
-  system's light or dark setting picks.
-- **Tone, not lines.** The three columns differ by a step in tone. Only what
-  floats (menus, dialogs) casts a shadow. Round is for what you press, 12px for
-  what holds content.
-- **Type.** Schibsted Grotesk for the interface and for what people say; Geist
-  Mono for IRC's two columns, the time and the nick, and for code. Both are
-  bundled under the SIL Open Font License (`public/fonts/LICENSE.txt`), so the
-  client loads nothing from elsewhere.
+- the hand button beside the message box raises and lowers your hand (`/hand`);
+- in quiet mode you can read, vote and raise your hand, and write once your
+  teacher gives you the floor;
+- hover a message to react, reply or report it to your teacher;
+- `/register <password>` keeps your name, your classes and your messages for
+  next time; `/joincode <code>` adds another class.
 
-The interface was designed from generated mock-ups before it was built: a Day
-and a Dusk concept for the chat and one for the sign-in screen, kept in
-`docs/design/` (`concept-day.webp`, `concept-dusk.webp`, `concept-login.webp`).
-The tokens are the custom properties at the top of `public/css/app.css`; the
-mark, the swarms and the flocks are drawn by `public/js/swarm.js`.
+## The school rules
 
-## Connecting with an IRC client
+These are on by default. Switch them all off and this is plain Swarm again.
 
-```
-/connect localhost 6667
-```
+| Rule | Environment variable to change it |
+| --- | --- |
+| A guest needs a class code to come in | `SWARM_GUESTS_NEED_CODE=0` |
+| Only teachers open classes | `SWARM_ONLY_TEACHERS_CREATE=0` |
+| Private messages need a teacher at one end | `SWARM_STUDENT_DMS=1` |
+| Students only see their own classes in the list | `SWARM_PRIVATE_LIST=0` |
 
-- An unregistered nick connects as a guest.
-  `/msg NickServ REGISTER <password>` registers it.
-- A registered nick needs its password as the **server password**
-  (`PASS`, e.g. `/connect localhost 6667 <password>`).
-- Clients that ask for the `server-time` capability get the last 50 messages
-  of every channel replayed with their real timestamps when they connect.
-  `echo-message` is supported as well.
-- Supported: `JOIN PART PRIVMSG NOTICE TOPIC NAMES LIST WHO WHOIS MODE KICK
-  INVITE AWAY NICK MOTD LUSERS ISON USERHOST PING QUIT` and CTCP `ACTION`.
-  Edits, reactions and typing notices have no IRC equivalent and are not sent.
+Things worth knowing:
 
-The gateway speaks plain text. For anything beyond a trusted network, put a
-TLS terminator in front of it (and of the web port).
+- **A class lives as long as it has members.** Registered members, the teacher
+  included, stay members while offline, so a class normally outlives the
+  lesson. When its last member leaves, the class and its history are deleted.
+- **Guests** hold their name only while connected (a short disconnect goes
+  unnoticed). Their messages stay in the class; their private messages are not
+  kept.
+- **Codes and sign-ins are rate-limited** per address: ten wrong passwords,
+  class codes or staff codes lock that address out for ten minutes.
+- **Reports and transcripts stay on your server.** The client loads nothing
+  from other hosts.
+- **Bans** are on a name; for a registered name they follow the account.
 
 ## Configuration
 
@@ -136,35 +148,58 @@ Environment variables, all optional:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `SWARM_TEACHER_CODE` | none | The staff code: registering with it, or `/teacher <code>`, makes a teacher |
+| `SWARM_TEACHERS` | none | Registered names that are teachers, comma-separated |
 | `PORT` | `3000` | Web client and WebSocket |
 | `IRC_PORT` | `6667` | IRC gateway; `0` switches it off |
 | `HOST` | `0.0.0.0` | Address to listen on |
 | `DB_PATH` | `data/swarm.db` | SQLite file; `:memory:` keeps nothing |
-| `SWARM_NAME` | `Swarm` | Name of the network |
+| `SWARM_NAME` | `Swarm Edu` | Name of the school's network |
 | `SWARM_MOTD` | a welcome line | Shown on connect |
-| `SWARM_CHANNELS` | `#lobby` | Default channels, comma-separated |
-| `SWARM_ADMINS` | none | Registered nicks that run the default channels |
+| `SWARM_CHANNELS` | none | Channels everyone lands in, comma-separated; a school usually has none |
+| `SWARM_ADMINS` | none | Registered names that run those default channels |
 | `SWARM_GRACE_MS` | `20000` | How long a dropped user stays "online" |
 | `TRUST_PROXY` | off | `1` to take the client address from `X-Forwarded-For` |
+
+Both ports speak plain text. For anything beyond a trusted network, and
+certainly for a school, put a TLS terminator in front of them.
+
+## Connecting with an IRC client
+
+The classroom maps onto IRC as it is:
+
+| Classroom | IRC |
+| --- | --- |
+| Class code | Channel key, mode `+k` |
+| Quiet mode | Moderated, mode `+m` |
+| Having the floor | Voice, mode `+v` |
+| Locked class | Invite-only, mode `+i` |
+| Running the class | Operator, mode `+o` |
+
+- **A student** connects with the class code as the server password:
+  `/connect localhost 6667 K7M2QX`. They arrive in that class as a guest.
+  `JOIN #class <code>` adds another one.
+- **A registered name** connects with its own password as the server password.
+  `/msg NickServ REGISTER <password>` registers a guest's name.
+- Clients that ask for the `server-time` capability get the last 50 messages
+  of every class replayed with their real timestamps.
+- A poll arrives as a notice with its question and options; voting, hands,
+  pins and reports are in the web client only.
+- `MODE #class +k` gives a class a new code (the key a client sends is
+  ignored: codes are generated), `-k` removes it.
 
 ## For developers
 
 ```
-src/core/hub.js      the chat itself: users, channels, roles, messages, sessions
+src/core/hub.js      the chat itself; the section "school" holds the classroom
 src/db.js            everything that survives a restart (SQLite)
 src/gateways/ws.js   JSON over WebSocket, for the web client
 src/gateways/irc.js  the IRC protocol, for everything else
-src/gateways/http.js static files, /api/info, /healthz
-public/              the web client: plain ES modules, no build step
-public/js/swarm.js   the house style in code: mark, swarm glyphs, live flocks
-docs/design/         concept mock-ups and screenshots
-test/                node:test suites for the hub and both gateways
+public/js/ui/school.js   class panel, board view, poll dialog, hand and pin
+public/js/ui/poll.js     a poll inside its message
+public/css/school.css    the classroom's styles, on top of app.css
+test/school.test.js      the school rules, in the hub and over both gateways
 ```
-
-The hub knows nothing about wire protocols. A gateway hands it a connection
-object with a `deliver(event)` method, calls methods such as `hub.send(user,
-target, text)`, and translates the events that come back. Adding another
-protocol means writing another gateway.
 
 ```bash
 npm test
@@ -174,11 +209,35 @@ npm test
 npm run dev
 ```
 
-The WebSocket protocol is small: the client sends `{ id, op, ...params }`, the
-server answers `{ type: "reply", id, ok, data | error }` and pushes events such
-as `message`, `join`, `topic` or `presence`. The first request is `hello` with
-a `nick`, a `nick` and `password`, or a `token` from an earlier session. The
-list of operations is the `OPS` table in `src/gateways/ws.js`.
+### Staying close to Swarm
+
+This repository is a fork: `main` started as Swarm's history, and the
+education edition is built on top of it. To keep taking changes from upstream:
+
+```bash
+git remote add upstream https://github.com/aireport-online/swarm
+```
+
+```bash
+git fetch upstream
+```
+
+The classroom is written to merge cleanly. New behaviour sits behind the
+`school` settings of the hub, and the suites inherited from Swarm
+(`test/hub.test.js`, `test/gateways.test.js`) run with those settings off, so
+they still describe plain Swarm. New client code lives in its own files
+(`school.js`, `poll.js`, `school.css`).
+
+What the WebSocket protocol gained: `hello` takes a `code` (class code) and a
+`teacherCode`; new operations `joinCode`, `code`, `teacher`, `hand`, `poll`,
+`vote`, `closePoll`, `pin`, `report`, `resolveReport`, `participation` and
+`transcript`; new events `hand`, `pin`, `code` and `reports`. A message of
+kind `poll` carries a `poll` object that differs per reader: `counts` and
+`correct` are `null` until that reader is allowed to see them.
+
+The look is Swarm's house style, Murmuration: every person is a dot, and you
+are the coloured one. On the board view the class's flock grows as students
+join. See `docs/design/` for the original concepts.
 
 ## License
 

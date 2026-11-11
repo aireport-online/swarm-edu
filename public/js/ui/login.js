@@ -6,10 +6,12 @@ const form = $('#login-form');
 const error = $('#login-error');
 const hint = $('#login-hint');
 const passwordField = $('#password-field');
+const codeField = $('#code-field');
+const staffField = $('#staff-field');
 const HINTS = {
-  guest: 'No account needed. The nick is yours for as long as you are connected.',
-  signin: 'For a nick you registered earlier.',
-  register: 'Claims the nick with a password, and keeps your channels and messages between visits.',
+  guest: 'No account needed. Letters, digits, "_" and "-", no spaces.',
+  signin: 'For a name you registered earlier. Add a class code to join another class as well.',
+  register: 'Keeps your name, your classes and your messages between visits. The class code is optional here.',
 };
 
 const mode = () => new FormData(form).get('mode');
@@ -18,6 +20,8 @@ function syncMode() {
   const current = mode();
   passwordField.hidden = current === 'guest';
   form.elements.password.required = current !== 'guest';
+  form.elements.code.required = current === 'guest';
+  staffField.hidden = current !== 'register' || !app.info.staffCode;
   form.elements.password.autocomplete = current === 'register' ? 'new-password' : 'current-password';
   hint.textContent = HINTS[current];
 }
@@ -34,13 +38,18 @@ form.addEventListener('submit', async (event) => {
   const current = mode();
   const nick = data.get('nick').trim();
   const password = current === 'guest' ? undefined : data.get('password');
-  if (!nick) return fail('Choose a nick first.');
+  const code = data.get('code').trim() || undefined;
+  const teacherCode = (current === 'register' && data.get('staff')) || undefined;
+  if (!nick) return fail('Type your name first.');
+  if (current === 'guest' && !code) return fail('Type the class code your teacher gave you.');
   const button = form.querySelector('button[type=submit]');
   button.disabled = true;
   fail('');
   try {
-    await app.connect({ nick, password, register: current === 'register' });
+    await app.connect({ nick, password, register: current === 'register', code, teacherCode });
     form.elements.password.value = '';
+    form.elements.staff.value = '';
+    form.elements.code.value = '';
   } catch (err) {
     app.setPhase('login');
     fail(err.message);
@@ -75,12 +84,22 @@ app.on('phase', ({ phase, message }) => {
   requestAnimationFrame(() => form.elements.nick.focus());
 });
 
+/** A link such as /#join=ABC234 arrives with the class code filled in. */
+function codeFromLink() {
+  const match = /^#join=([A-Za-z0-9-]{4,14})$/.exec(location.hash);
+  if (!match) return;
+  form.elements.code.value = match[1].toUpperCase();
+  history.replaceState(null, '', location.pathname);
+}
+
 export async function initLogin() {
+  codeFromLink();
   syncMode();
   try {
     app.info = await (await fetch('/api/info')).json();
     for (const el of document.querySelectorAll('.brand-name')) el.textContent = app.info.name;
     document.title = app.info.name;
+    syncMode();
     if (app.info.ircPort) {
       const irc = $('#login-irc');
       irc.textContent = `irc: ${location.hostname}:${app.info.ircPort}`;

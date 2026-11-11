@@ -3,7 +3,7 @@ import { Flock } from '../swarm.js';
 import { $, fill, h, icon } from './dom.js';
 
 const el = $('#topbar');
-const MODE_WORDS = { m: 'moderated', i: 'invite-only' };
+const MODE_WORDS = { m: 'quiet mode', i: 'locked' };
 
 // The conversation's flock: one bird per person who is here, you in colour.
 // It swells where someone speaks. The canvas outlives every redraw of the bar.
@@ -46,6 +46,7 @@ function render() {
   if (!buffer || !app.self) return;
   const online = [...buffer.members.values()].filter((member) => member.online).length;
   const flags = [...buffer.modes].map((flag) => MODE_WORDS[flag]).filter(Boolean);
+  const quiet = buffer.modes.includes('m');
   flock.setBirds(birds(buffer));
   fill(
     el,
@@ -62,6 +63,25 @@ function render() {
     h(
       'div.topbar-actions',
       null,
+      // For whoever runs the class: quiet mode in one press, and the class itself.
+      app.runs(buffer) &&
+        h(
+          `button.people-toggle.quiet-toggle${quiet ? '.on' : ''}`,
+          {
+            type: 'button', 'aria-pressed': String(quiet), title: quiet ? 'Quiet mode is on: let everyone write again' : 'Quiet mode: only you write, students raise a hand',
+            on: { click: () => app.setFlag('m', !quiet, buffer) },
+          },
+          icon(quiet ? 'quiet' : 'sound', 18),
+          h('span', null, quiet ? 'Quiet' : 'Open'),
+        ),
+      app.runs(buffer) &&
+        h(
+          'button.people-toggle.class-button',
+          { type: 'button', title: 'Class code, the board view, reports and who took part', on: { click: () => app.emit('dialog', 'class') } },
+          icon('board', 18),
+          h('span', null, buffer.code ? `${buffer.code.slice(0, 3)} ${buffer.code.slice(3)}` : 'Class'),
+          buffer.reports.length > 0 && h('span.badge', { 'aria-label': `${buffer.reports.length} reported` }, String(buffer.reports.length)),
+        ),
       h('button.icon-button', { type: 'button', title: 'Search', 'aria-label': 'Search messages', on: { click: () => app.emit('dialog', { name: 'search' }) } }, icon('search', 18)),
       buffer.type === 'channel' &&
         h(
@@ -77,7 +97,7 @@ function render() {
   );
 }
 
-for (const name of ['active', 'header', 'members', 'phase']) app.on(name, render);
+for (const name of ['active', 'header', 'members', 'phase', 'school']) app.on(name, render);
 app.on('items', ({ buffer, kind, item }) => {
   if (buffer === app.active && kind === 'append' && !item.local) flock.pulse(item.nick.toLowerCase());
 });

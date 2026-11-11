@@ -5,6 +5,7 @@ import { after, before, test } from 'node:test';
 import { WebSocket } from 'ws';
 import { wrapForIrc } from '../src/gateways/irc.js';
 import { createApp } from '../src/server.js';
+import { OPEN } from './helpers.js';
 
 const PASSWORD = 'correct horse';
 let app;
@@ -15,7 +16,7 @@ before(async () => {
   app = createApp(
     {
       host: '127.0.0.1', port: 0, ircPort: -1, dbPath: ':memory:', trustProxy: false,
-      hub: { serverName: 'Test Net', motd: 'Hello there.', defaultChannels: ['#lobby'], graceMs: 0, messageBurst: 1000 },
+      hub: { serverName: 'Test Net', motd: 'Hello there.', defaultChannels: ['#lobby'], graceMs: 0, messageBurst: 1000, school: OPEN },
     },
     { log: () => {} },
   );
@@ -112,7 +113,7 @@ test('http serves the client, its info and nothing outside the public folder', a
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /text\/html/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'self'/);
-  assert.deepEqual(await (await fetch(`${base}/api/info`)).json(), { name: 'Test Net', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, ircPort: ports.irc });
+  assert.deepEqual(await (await fetch(`${base}/api/info`)).json(), { name: 'Test Net', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, ircPort: ports.irc, staffCode: false });
   assert.equal((await (await fetch(`${base}/healthz`)).json()).ok, true);
   assert.equal((await fetch(`${base}/%2e%2e/package.json`)).status, 404);
   assert.equal((await fetch(`${base}/..%2fsrc/server.js`)).status, 404);
@@ -151,7 +152,7 @@ test('websocket: register, resume by token, and sign out', async () => {
   cy.ws.close();
 
   const resumed = await web({ token });
-  assert.deepEqual(resumed.snapshot.self, { nick: 'cy', registered: true, away: null });
+  assert.deepEqual(resumed.snapshot.self, { nick: 'cy', registered: true, away: null, teacher: false });
   await resumed.request('logout');
   await assert.rejects((await web()).request('hello', { token }), { code: 'bad_token' });
   await assert.rejects((await web()).request('hello', { nick: 'cy', password: 'not the one' }), { code: 'bad_password' });

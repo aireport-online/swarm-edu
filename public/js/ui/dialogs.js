@@ -25,7 +25,12 @@ function listKeys(input, list) {
 /** Go to a channel or a person: joined, known to the server, or brand new. */
 function jump() {
   dialog('Jump to', (close) => {
-    const input = h('input.dialog-input', { type: 'text', placeholder: 'Find or create a channel, or type a nick', spellcheck: false, autocapitalize: 'none', 'aria-label': 'Channel or nick' });
+    const teacher = app.self.teacher;
+    const mayOpen = teacher || !app.server.rules?.onlyTeachersCreate;
+    const input = h('input.dialog-input', {
+      type: 'text', spellcheck: false, autocapitalize: 'none', 'aria-label': 'Class, code or name',
+      placeholder: teacher ? 'Find or open a class, or type a name' : 'Type a class code, or find a class or teacher',
+    });
     const list = h('div.results', { role: 'listbox' });
     let known = [];
 
@@ -44,14 +49,32 @@ function jump() {
         rows.push(entry(channel.name, channel.topic, `${channel.online} online`, () => app.join(channel.name)));
       }
       const bare = query.replace(/^#/, '');
-      if (/^[a-z0-9][a-z0-9_.-]{0,31}$/.test(bare) && !app.buffers.has(`#${bare}`) && !known.some((channel) => channel.name === `#${bare}`)) {
-        rows.push(entry(`#${bare}`, 'Create this channel', null, () => app.join(`#${bare}`)));
+      const code = query.replace(/[\s-]/g, '').toUpperCase();
+      if (/^[A-Z0-9]{6}$/.test(code) && !query.startsWith('#')) {
+        rows.push(entry(`${code.slice(0, 3)} ${code.slice(3)}`, 'Join the class with this code', null, () => app.joinCode(code)));
       }
-      if (/^[a-z_][a-z0-9_-]{1,19}$/.test(query) && !app.buffers.has(query) && !app.isSelf(query)) {
-        rows.push(entry(query, 'Send a direct message', null, () => app.openDm(query)));
+      if (mayOpen && /^[a-z0-9][a-z0-9_.-]{0,31}$/.test(bare) && !app.buffers.has(`#${bare}`) && !known.some((channel) => channel.name === `#${bare}`)) {
+        rows.push(entry(`#${bare}`, 'Open this class', null, () => app.join(`#${bare}`)));
+      }
+      if (teacher || app.server.rules?.studentDms !== false) {
+        if (/^[a-z_][a-z0-9_-]{1,19}$/.test(query) && !app.buffers.has(query) && !app.isSelf(query)) {
+          rows.push(entry(query, 'Send a private message', null, () => app.openDm(query)));
+        }
+      } else {
+        // A student can write privately to the teachers of their classes.
+        const teachers = new Map();
+        for (const buffer of app.list('channel')) {
+          for (const member of buffer.members.values()) if (member.teacher && !app.isSelf(member.nick)) teachers.set(member.nick.toLowerCase(), member.nick);
+        }
+        for (const [key, nick] of teachers) {
+          if (key.includes(query) && !app.buffers.has(key)) rows.push(entry(nick, 'Message your teacher', null, () => app.openDm(nick)));
+        }
       }
       rows[0]?.classList.add('selected');
-      fill(list, rows.length ? rows : h('p.results-empty', null, 'Nothing by that name. Channel names use letters, digits, ".", "_" and "-".'));
+      const nothing = teacher
+        ? 'Nothing by that name. Class names use letters, digits, ".", "_" and "-".'
+        : 'Type the six characters of a class code to join that class.';
+      fill(list, rows.length ? rows : h('p.results-empty', null, nothing));
     }
 
     input.addEventListener('input', show);

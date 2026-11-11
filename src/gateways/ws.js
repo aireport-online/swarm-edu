@@ -14,7 +14,8 @@ const TOO_MANY_NICKS = 'Too many nicks were registered from your address. Try ag
  * user, the request and the connection, and returns the reply's data.
  */
 const OPS = {
-  join: (hub, user, p) => hub.join(user, p.channel),
+  join: (hub, user, p) => hub.join(user, p.channel, { code: p.code }),
+  joinCode: (hub, user, p) => hub.joinByCode(user, p.code),
   part: (hub, user, p) => hub.part(user, p.channel, p.reason),
   send: (hub, user, p, conn) => hub.send(user, p.target, p.text, { kind: p.kind, replyTo: p.replyTo, origin: conn.id }),
   edit: (hub, user, p) => hub.edit(user, p.msgId, p.text),
@@ -27,13 +28,25 @@ const OPS = {
   mode: (hub, user, p) => hub.setMode(user, p.channel, p.changes),
   bans: (hub, user, p) => hub.bans(user, p.channel),
   invite: (hub, user, p) => hub.invite(user, p.channel, p.nick),
-  list: (hub) => hub.list(),
+  list: (hub, user) => hub.list(user),
   whois: (hub, user, p) => hub.whois(user, p.nick),
   away: (hub, user, p) => hub.setAway(user, p.message),
   typing: (hub, user, p) => hub.typing(user, p.target),
   read: (hub, user, p, conn) => hub.markRead(user, p.target, p.msgId, { origin: conn.id }),
   search: (hub, user, p) => hub.search(user, p.query),
   register: (hub, user, p, conn) => hub.register(user, p.password, conn),
+  // The classroom.
+  code: (hub, user, p) => hub.setCode(user, p.channel, p.action),
+  teacher: (hub, user, p) => hub.becomeTeacher(user, p.code),
+  hand: (hub, user, p) => hub.hand(user, p.channel, { up: p.up, nick: p.nick }),
+  poll: (hub, user, p, conn) => hub.createPoll(user, p.channel, { question: p.question, options: p.options, correct: p.correct, origin: conn.id }),
+  vote: (hub, user, p) => hub.vote(user, p.msgId, p.choice),
+  closePoll: (hub, user, p) => hub.closePoll(user, p.msgId),
+  pin: (hub, user, p) => hub.pin(user, p.channel, p.msgId),
+  report: (hub, user, p) => hub.report(user, p.msgId),
+  resolveReport: (hub, user, p) => hub.resolveReport(user, p.reportId),
+  participation: (hub, user, p) => hub.participation(user, p.channel),
+  transcript: (hub, user, p) => hub.transcript(user, p.channel),
 };
 
 /**
@@ -72,7 +85,8 @@ export function attachWebSocket(httpServer, hub, { loginGuard, registrationGuard
     };
 
     async function hello(request) {
-      const guessing = Boolean(request.password) && !request.register;
+      // A password, a class code and a staff code can all be guessed at.
+      const guessing = (Boolean(request.password) && !request.register) || Boolean(request.code) || Boolean(request.teacherCode);
       if (guessing && loginGuard.blocked(address)) {
         throw new ChatError('rate_limited', 'Too many failed sign-ins from your address. Try again later.');
       }
@@ -80,7 +94,14 @@ export function attachWebSocket(httpServer, hub, { loginGuard, registrationGuard
       // Counted before the password is checked, so attempts made in parallel
       // cannot all slip under the limit; a correct password is forgiven.
       if (guessing) loginGuard.fail(address);
-      const snapshot = await hub.login(conn, request);
+      let snapshot;
+      try {
+        snapshot = await hub.login(conn, request);
+      } catch (err) {
+        // Only a wrong secret counts against the address; a taken nick does not.
+        if (guessing && !['bad_password', 'bad_code', 'bad_teacher_code'].includes(err.code)) loginGuard.forgive(address);
+        throw err;
+      }
       if (guessing) loginGuard.forgive(address);
       if (request.register) registrationGuard.fail(address);
       return snapshot;

@@ -25,6 +25,20 @@ const stored = {
   },
 };
 
+/** A mode change in the words of a classroom. */
+function describeMode({ add, mode, arg }) {
+  switch (mode) {
+    case 'm': return add ? 'turned quiet mode on: raise a hand to speak' : 'turned quiet mode off';
+    case 'i': return add ? 'locked the class: nobody new can join' : 'unlocked the class';
+    case 'k': return add ? 'gave the class a code' : 'removed the class code';
+    case 'v': return add ? `gave ${arg} the floor` : `took the floor back from ${arg}`;
+    case 'o': return add ? `let ${arg} run the class` : `stopped ${arg} running the class`;
+    case 'b': return add ? `banned ${arg}` : `lifted the ban on ${arg}`;
+    case 't': return add ? 'reserved the topic for those who run the class' : 'let everyone change the topic';
+    default: return `set mode ${add ? '+' : '-'}${mode}${arg ? ` ${arg}` : ''}`;
+  }
+}
+
 const listeners = new Map();
 let conn = null;
 let localSeq = 0;
@@ -54,6 +68,9 @@ export const app = {
   on(name, fn) {
     if (!listeners.has(name)) listeners.set(name, new Set());
     listeners.get(name).add(fn);
+  },
+  off(name, fn) {
+    listeners.get(name)?.delete(fn);
   },
   emit(name, detail) {
     for (const fn of listeners.get(name) ?? []) fn(detail);
@@ -163,10 +180,13 @@ export const app = {
       this.note(
         status,
         'info',
-        snapshot.self.registered
-          ? `You are signed in as ${snapshot.self.nick}.`
-          : `You are a guest. Type /register <password> to keep the nick ${snapshot.self.nick}.`,
+        snapshot.self.teacher
+          ? `You are signed in as ${snapshot.self.nick}, a teacher. Open a class with /class <name>.`
+          : snapshot.self.registered
+            ? `You are signed in as ${snapshot.self.nick}. Join a class with the code from your teacher: /joincode <code>.`
+            : `You are here as a guest. Type /register <password> to keep the name ${snapshot.self.nick} and your classes.`,
       );
+      if (snapshot.notice) this.note(status, 'error', snapshot.notice);
     }
     for (const state of snapshot.channels) this.addChannel(state, previous.get(keyOf(state.name)));
     for (const dm of snapshot.dms) {
@@ -184,7 +204,8 @@ export const app = {
     }
 
     // A link such as /#dev opens (and if need be joins) that channel.
-    const fromHash = location.hash.length > 1 ? `#${decodeURIComponent(location.hash.slice(1))}` : null;
+    // (#join=CODE is a class code for the sign-in screen, not a channel.)
+    const fromHash = location.hash.length > 1 && !location.hash.includes('=') ? `#${decodeURIComponent(location.hash.slice(1))}` : null;
     const wanted = resuming ? this.activeKey : keyOf(fromHash ?? stored.get('active') ?? '');
     this.setPhase('online');
     const first = this.buffers.has(wanted) ? wanted : this.list('channel')[0]?.key ?? STATUS;
@@ -210,7 +231,37 @@ export const app = {
       newAfter: null,
       typing: new Map(),
       draft: '',
+      // The classroom: who has a hand up (first up first), the pinned message,
+      // and, for those who run the class, its code and the reported messages.
+      hands: [],
+      pinned: null,
+      code: null,
+      reports: [],
     };
+  },
+
+  /** May the user write privately to this person? In a school one of the two has to be a teacher. */
+  mayMessage(nick) {
+    if (this.server.rules?.studentDms !== false || this.self.teacher) return true;
+    const key = keyOf(nick);
+    for (const buffer of this.buffers.values()) {
+      if (buffer.type === 'channel' && buffer.members.get(key)?.teacher) return true;
+      if (buffer.type === 'dm' && buffer.key === key && buffer.peer?.teacher) return true;
+    }
+    return false;
+  },
+
+  /** The user's own membership of a channel: role and all. */
+  me(buffer = this.active) {
+    return buffer?.type === 'channel' ? buffer.members.get(keyOf(this.self.nick)) : null;
+  },
+  /** Does the user run this class? */
+  runs(buffer = this.active) {
+    return this.me(buffer)?.role === 'op';
+  },
+  /** Is the class in quiet mode with the user not allowed to speak? */
+  muted(buffer = this.active) {
+    return buffer?.type === 'channel' && buffer.modes.includes('m') && !this.me(buffer)?.role;
   },
 
   addChannel(state, existing) {
@@ -218,6 +269,7 @@ export const app = {
     Object.assign(buffer, {
       name: state.name, topic: state.topic, topicBy: state.topicBy, topicAt: state.topicAt, modes: state.modes,
       unread: state.unread, mentions: state.mentions, lastRead: state.lastRead,
+      hands: state.hands ?? [], pinned: state.pinned ?? null, code: state.code ?? null, reports: state.reports ?? [],
     });
     buffer.members = new Map(state.members.map((member) => [keyOf(member.nick), member]));
     this.buffers.set(buffer.key, buffer);
@@ -341,11 +393,23 @@ export const app = {
     }
   },
 
-  async join(name) {
+  async join(name, code) {
     const key = keyOf(name.startsWith('#') ? name : `#${name}`);
     if (this.buffers.has(key)) return this.activate(key);
-    const result = await this.run('join', { channel: key });
+    const result = await this.run('join', { channel: key, code });
     if (result) this.activate(keyOf(result.channel.name));
+  },
+
+  /** Joins whichever class a code belongs to. */
+  async joinCode(code) {
+    const result = await this.run('joinCode', { code });
+    if (result) this.activate(keyOf(result.channel.name));
+    return Boolean(result);
+  },
+
+  /** `flag` on or off for the current class: m is quiet mode, i is the lock. */
+  setFlag(flag, add, buffer = this.active) {
+    return this.run('mode', { channel: buffer.name, changes: [{ add, mode: flag }] });
   },
 
   openDm(nick) {
@@ -451,6 +515,7 @@ export const app = {
       if (!buffer) return;
       if (this.isSelf(nick)) return this.dropBuffer(buffer);
       buffer.members.delete(keyOf(nick));
+      this.dropHand(buffer, nick);
       this.join_note(buffer, 'part', nick, reason ? `left (${reason})` : 'left');
       this.touchMembers(buffer);
     },
@@ -466,6 +531,7 @@ export const app = {
         return;
       }
       buffer.members.delete(keyOf(nick));
+      this.dropHand(buffer, nick);
       this.note(buffer, 'part', `was kicked by ${by}${why}`, { nick });
       this.touchMembers(buffer);
     },
@@ -473,19 +539,21 @@ export const app = {
     quit({ nick, reason }) {
       for (const buffer of this.channelsWith(nick)) {
         buffer.members.delete(keyOf(nick));
+        this.dropHand(buffer, nick);
         this.join_note(buffer, 'part', nick, reason ? `quit (${reason})` : 'quit');
         this.touchMembers(buffer);
       }
       this.peerChanged(nick, { online: false });
     },
 
-    presence({ change, nick, online, away, registered }) {
+    presence({ change, nick, online, away, registered, teacher }) {
       if (this.isSelf(nick)) {
-        this.self = { ...this.self, away, registered };
+        this.self = { ...this.self, away, registered, teacher };
         this.emit('self');
       }
       for (const buffer of this.channelsWith(nick)) {
-        Object.assign(buffer.members.get(keyOf(nick)), { online, away, registered });
+        Object.assign(buffer.members.get(keyOf(nick)), { online, away, registered, teacher });
+        if (!online) this.dropHand(buffer, nick);
         if (change === 'online') this.join_note(buffer, 'join', nick, 'is back online');
         if (change === 'offline') this.join_note(buffer, 'part', nick, 'went offline');
         this.touchMembers(buffer);
@@ -505,6 +573,7 @@ export const app = {
         const member = buffer.members.get(oldKey);
         buffer.members.delete(oldKey);
         buffer.members.set(key, { ...member, nick });
+        buffer.hands = buffer.hands.map((hand) => (keyOf(hand) === oldKey ? nick : hand));
         this.note(buffer, 'info', `is now known as ${nick}`, { nick: old });
         this.touchMembers(buffer);
       }
@@ -535,8 +604,7 @@ export const app = {
         const member = change.arg && 'ov'.includes(change.mode) ? buffer.members.get(keyOf(change.arg)) : null;
         if (member) member.role = change.role;
       }
-      const flags = changes.map((change) => `${change.add ? '+' : '-'}${change.mode}${change.arg ? ` ${change.arg}` : ''}`);
-      this.note(buffer, 'info', `set mode ${flags.join(' ')}`, { nick: by });
+      for (const change of changes) this.note(buffer, 'info', describeMode(change), { nick: by });
       this.touchMembers(buffer);
       if (buffer === this.active) this.emit('header');
     },
@@ -571,11 +639,53 @@ export const app = {
       this.emit('buffers');
     },
 
+    hand({ channel, nick, up }) {
+      const buffer = this.buffers.get(keyOf(channel));
+      if (!buffer) return;
+      this.dropHand(buffer, nick);
+      if (up) buffer.hands.push(nick);
+      if (up && this.runs(buffer) && buffer !== this.active) this.note(buffer, 'info', 'raised a hand', { nick });
+      this.touchMembers(buffer);
+      this.emit('hands', buffer);
+    },
+
+    pin({ channel, pinned, by }) {
+      const buffer = this.buffers.get(keyOf(channel));
+      if (!buffer) return;
+      buffer.pinned = pinned;
+      this.note(buffer, 'info', pinned ? 'pinned a message' : 'took the pinned message down', { nick: by });
+      if (buffer === this.active) this.emit('header');
+    },
+
+    code({ channel, code }) {
+      const buffer = this.buffers.get(keyOf(channel));
+      if (!buffer) return;
+      buffer.code = code;
+      this.emit('school', buffer);
+      if (buffer === this.active) this.emit('header');
+    },
+
+    reports({ channel, reports }) {
+      const buffer = this.buffers.get(keyOf(channel));
+      if (!buffer) return;
+      const known = new Set(buffer.reports.map((report) => report.id));
+      for (const report of reports) {
+        if (!known.has(report.id)) this.note(buffer, 'error', `reported a message by ${report.msg.nick}. Open Class to look at it.`, { nick: report.by });
+      }
+      buffer.reports = reports;
+      this.emit('school', buffer);
+      if (buffer === this.active) this.emit('header');
+    },
+
     self({ self, token }) {
       this.self = self;
       if (token) stored.set('token', token);
       this.emit('self');
     },
+  },
+
+  dropHand(buffer, nick) {
+    buffer.hands = buffer.hands.filter((hand) => keyOf(hand) !== keyOf(nick));
   },
 
   peerChanged(nick, change) {

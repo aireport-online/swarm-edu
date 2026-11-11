@@ -26,6 +26,7 @@ const NUMERIC_FOR = {
   nick_registered: 433,
   invalid_channel: 403,
   too_many_channels: 405,
+  bad_code: 475,
 };
 
 function parseIrcLine(line) {
@@ -213,24 +214,30 @@ class IrcClient {
     const { loginGuard } = this.options;
     if (this.password && loginGuard.blocked(this.address)) return this.drop('Too many failed sign-ins');
     const nick = this.wantedNick;
-    const guessing = Boolean(this.password);
+    const guessing = Boolean(this.password || this.classCode);
     let snapshot;
     try {
       // Counted up front so parallel attempts cannot slip under the limit.
       if (guessing) loginGuard.fail(this.address);
-      snapshot = await this.hub.login(this, { nick, password: this.password, session: false });
+      snapshot = await this.hub.login(this, { nick, password: this.password, code: this.classCode, session: false });
       if (guessing) loginGuard.forgive(this.address);
     } catch (err) {
-      if (guessing && err.code !== 'bad_password') loginGuard.forgive(this.address);
+      if (guessing && !['bad_password', 'bad_code'].includes(err.code)) loginGuard.forgive(this.address);
       if (err.code === 'closed') return;
       if (err.code === 'bad_password') {
         this.num(464, 'Password incorrect');
         return this.drop('Bad password');
       }
       if (err.code === 'no_such_account') {
-        // A server password with an unregistered nick: come in as a guest.
+        // A server password with an unregistered nick is a class code: a
+        // student comes in as a guest, straight into that class.
+        this.classCode = this.password;
         this.password = null;
         return this.tryRegister();
+      }
+      if (err.code === 'code_required' || err.code === 'bad_code') {
+        this.num(464, err.message);
+        return this.drop('Connect with your class code as the server password');
       }
       if (err.code === 'nick_registered') {
         this.notice(`${nick} is a registered nick. Connect with its password as the server password.`);
@@ -255,7 +262,7 @@ class IrcClient {
     this.raw(`:${this.host} 004 ${this.nick} ${this.host} ${version} o imnt`);
     this.num(
       5,
-      'CHANTYPES=#', 'PREFIX=(ov)@+', 'CHANMODES=b,,,imt', 'NICKLEN=20', 'CHANNELLEN=33', 'TOPICLEN=300',
+      'CHANTYPES=#', 'PREFIX=(ov)@+', 'CHANMODES=b,k,,imt', 'NICKLEN=20', 'CHANNELLEN=33', 'TOPICLEN=300',
       `NETWORK=${name.replace(/\s+/g, '-')}`, 'CASEMAPPING=ascii',
       'are supported by this server',
     );
@@ -312,6 +319,12 @@ class IrcClient {
     const own = nickKey(msg.nick) === this.user.key;
     const dest = isChannelName(target) ? target : own ? target : this.nick;
     const verb = msg.kind === 'notice' ? 'NOTICE' : 'PRIVMSG';
+    if (msg.kind === 'poll') {
+      // Voting happens in the web client; IRC at least sees the question.
+      const options = msg.poll ? ` (${msg.poll.options.join(' / ')})` : '';
+      const tags = this.caps.has('server-time') ? `@time=${new Date(msg.ts).toISOString()} ` : '';
+      return this.raw(`${tags}:${mask(msg.nick)} NOTICE ${dest} :[poll] ${msg.text}${options}`);
+    }
     const tags = this.caps.has('server-time') ? `@time=${new Date(msg.ts).toISOString()} ` : '';
     for (const line of wrapForIrc(msg.text)) {
       const text = msg.kind === 'action' ? `\x01ACTION ${line}\x01` : line;
@@ -356,7 +369,9 @@ class IrcClient {
         const visible = event.changes.filter((change) => change.online !== false);
         if (!visible.length) return;
         const flags = visible.map((change) => (change.add ? '+' : '-') + change.mode).join('');
-        const args = visible.filter((change) => change.arg).map((change) => ` ${change.arg}`).join('');
+        // IRC wants a parameter with +k; the code itself stays with the people who run the class.
+        const args = visible.map((change) => change.arg ?? (change.mode === 'k' && change.add ? '*' : null))
+          .filter(Boolean).map((arg) => ` ${arg}`).join('');
         return this.raw(`:${mask(event.by)} MODE ${event.channel} ${flags}${args}`);
       }
       case 'invite':
@@ -460,10 +475,11 @@ const PRE_REGISTRATION = {
 const COMMANDS = {
   JOIN(params) {
     if (!this.need(params, 1, 'JOIN')) return;
-    for (const name of params[0].split(',').filter(Boolean)) {
+    const keys = (params[1] ?? '').split(',');
+    for (const [i, name] of params[0].split(',').filter(Boolean).entries()) {
       if (name === '0') continue;
       try {
-        this.hub.join(this.user, name);
+        this.hub.join(this.user, name, { code: keys[i] || undefined });
       } catch (err) {
         if (!(err instanceof ChatError)) throw err;
         if (err.code === 'banned') this.num(474, name, err.message);
@@ -530,7 +546,7 @@ const COMMANDS = {
 
   LIST() {
     this.num(321, 'Channel', 'Users  Name');
-    for (const channel of this.hub.list().channels) {
+    for (const channel of this.hub.list(this.user).channels) {
       this.num(322, channel.name, String(channel.online), channel.topic);
     }
     this.num(323, 'End of /LIST');
@@ -610,6 +626,7 @@ const COMMANDS = {
       const change = { add, mode: flag };
       // Clients send bans as masks; here a ban is on a nick.
       if ('ovb'.includes(flag)) change.arg = (args.shift() ?? '').replace(/!.*$/, '');
+      if (flag === 'k') args.shift(); // the key a client sends is ignored: codes are generated
       changes.push(change);
     }
     this.hub.setMode(this.user, target, changes);

@@ -24,24 +24,100 @@ const role = (mode, add) => ({
  * Every slash command. `usage` and `help` feed /help and the autocomplete;
  * `run` gets the text after the command and the buffer it was typed in.
  */
+const onOff = (rest, current) => (rest === 'on' ? true : rest === 'off' ? false : !current);
+
+/** "Question | A | *B | C": the star marks the right answer of a quiz. */
+function parsePoll(rest, usage) {
+  const [question, ...options] = rest.split('|').map((part) => part.trim());
+  if (!question || options.length < 2) throw new Error(`Usage: ${usage}`);
+  const right = options.findIndex((option) => option.startsWith('*'));
+  return { question, options: options.map((option) => option.replace(/^\*\s*/, '')), correct: right < 0 ? null : right };
+}
+
 export const COMMANDS = {
+  joincode: {
+    usage: '<code>', help: 'Join a class with the code from your teacher',
+    run: (rest) => app.joinCode(need(rest, '/joincode <code>')),
+  },
+  hand: {
+    usage: '', help: 'Raise your hand, or lower it',
+    run(rest, buffer) {
+      const up = !buffer.hands.some((nick) => app.isSelf(nick));
+      return app.run('hand', { channel: channelOf(buffer), up });
+    },
+  },
+  class: {
+    usage: '<name>', help: 'Teachers: open a class (it gets a code)',
+    run: (rest) => app.join(need(words(rest)[0], '/class <name>')),
+  },
+  code: {
+    usage: '[new|off]', help: 'Teachers: show the class code, make a new one, or remove it',
+    async run(rest, buffer) {
+      const channel = channelOf(buffer);
+      if (rest === 'new' || rest === 'off') {
+        const result = await app.run('code', { channel, action: rest });
+        if (result) say(result.code ? `The new code of ${channel} is ${result.code}. The old one no longer works.` : `${channel} has no code now.`);
+        return;
+      }
+      say(buffer.code ? `The code of ${channel} is ${buffer.code}.` : app.runs(buffer) ? `${channel} has no code. /code new gives it one.` : 'Ask your teacher for the code.');
+    },
+  },
+  quiet: {
+    usage: '[on|off]', help: 'Teachers: quiet mode, where students raise a hand to speak',
+    run: (rest, buffer) => app.setFlag('m', onOff(rest, channelOf(buffer) && buffer.modes.includes('m')), buffer),
+  },
+  lock: {
+    usage: '[on|off]', help: 'Teachers: lock the class so nobody new can join',
+    run: (rest, buffer) => app.setFlag('i', onOff(rest, channelOf(buffer) && buffer.modes.includes('i')), buffer),
+  },
+  floor: { help: 'Teachers: let a student write during quiet mode', ...role('v', true) },
+  poll: {
+    usage: '<question> | <option> | <option> …', help: 'Teachers: ask the class; results show once you have voted',
+    run: (rest, buffer) => app.run('poll', { channel: channelOf(buffer), ...parsePoll(rest, '/poll Question | Option | Option') }),
+  },
+  quiz: {
+    usage: '<question> | <option> | *<right option> …', help: 'Teachers: a poll with a right answer, hidden until you close it',
+    run(rest, buffer) {
+      const poll = parsePoll(rest, '/quiz Question | Option | *Right option');
+      if (poll.correct == null) throw new Error('Put a * in front of the right option.');
+      return app.run('poll', { channel: channelOf(buffer), ...poll });
+    },
+  },
+  unpin: {
+    usage: '', help: 'Teachers: take the pinned message down',
+    run: (rest, buffer) => app.run('pin', { channel: channelOf(buffer), msgId: null }),
+  },
+  teacher: {
+    usage: '<staff code>', help: 'Staff: turn your registered name into a teacher account',
+    async run(rest) {
+      const self = await app.request('teacher', { code: need(rest, '/teacher <staff code>') });
+      app.self = self;
+      app.emit('self');
+      say('You are a teacher now. Open a class with /class <name>.');
+    },
+  },
   join: {
-    usage: '<#channel>', help: 'Join a channel, or create it',
-    run: (rest) => app.join(need(words(rest)[0], '/join <#channel>')),
+    usage: '<#class> [code]', help: 'Join a class by name',
+    run(rest) {
+      const [name, code] = words(rest);
+      return app.join(need(name, '/join <#class> [code]'), code);
+    },
   },
   part: {
-    usage: '[reason]', help: 'Leave this channel',
+    usage: '[reason]', help: 'Leave this class',
     run: (rest, buffer) => app.run('part', { channel: channelOf(buffer), reason: rest }),
   },
-  close: { usage: '', help: 'Close this conversation or leave this channel', run: (rest, buffer) => app.close(buffer) },
+  close: { usage: '', help: 'Close this conversation or leave this class', run: (rest, buffer) => app.close(buffer) },
   msg: {
     usage: '<nick> <text>', help: 'Send a private message',
     async run(rest) {
       const [, nick, text] = /^(\S+)\s+([\s\S]+)$/.exec(rest) ?? [];
       need(text, '/msg <nick> <text>');
-      const target = nick.startsWith('#') ? app.buffers.get(nick.toLowerCase()) : app.ensureDm(nick);
-      if (!target) throw new Error(`You are not in ${nick}.`);
-      if (await app.send(text, { target })) app.activate(target.key);
+      if (nick.startsWith('#') && !app.buffers.has(nick.toLowerCase())) throw new Error(`You are not in ${nick}.`);
+      // Sent before any window opens for it: a refusal is shown here, where it was typed.
+      await app.request('send', { target: nick, text });
+      if (nick.startsWith('#')) app.activate(nick.toLowerCase());
+      else app.openDm(nick);
     },
   },
   query: {
@@ -82,9 +158,9 @@ export const COMMANDS = {
       say(lines.join('\n'));
     },
   },
-  list: { usage: '', help: 'Browse all channels', run: () => app.emit('dialog', 'jump') },
+  list: { usage: '', help: 'Find a class or a person', run: () => app.emit('dialog', 'jump') },
   search: {
-    usage: '<text>', help: 'Search your channels and conversations',
+    usage: '<text>', help: 'Search your classes and conversations',
     run: (rest) => app.emit('dialog', { name: 'search', query: rest }),
   },
   away: {
@@ -95,7 +171,7 @@ export const COMMANDS = {
   },
   back: { usage: '', help: 'You are no longer away', run: () => COMMANDS.away.run('') },
   register: {
-    usage: '<password>', help: 'Keep your nick: turn it into an account',
+    usage: '<password>', help: 'Keep your name and classes: turn the name into an account',
     async run(rest) {
       const result = await app.request('register', { password: need(rest, '/register <password>') });
       app.self = result.self;
@@ -105,7 +181,7 @@ export const COMMANDS = {
     },
   },
   kick: {
-    usage: '<nick> [reason]', help: 'Remove someone from the channel',
+    usage: '<nick> [reason]', help: 'Teachers: remove someone from the class',
     run(rest, buffer) {
       const [, nick, reason = ''] = /^(\S+)\s*([\s\S]*)$/.exec(rest) ?? [];
       return app.run('kick', { channel: channelOf(buffer), nick: need(nick, '/kick <nick> [reason]'), reason });
@@ -131,10 +207,10 @@ export const COMMANDS = {
   },
   op: { help: 'Make someone an operator', ...role('o', true) },
   deop: { help: 'Take operator status away', ...role('o', false) },
-  voice: { help: 'Let someone speak in a moderated channel', ...role('v', true) },
+  voice: { help: 'Same as /floor', ...role('v', true) },
   devoice: { help: 'Take voice away', ...role('v', false) },
   mode: {
-    usage: '<+flags|-flags> [nick…]', help: 'Channel modes: t topic lock, m moderated, i invite-only, o v b',
+    usage: '<+flags|-flags> [nick…]', help: 'The IRC way: t topic, m quiet, i locked, k code, o v b',
     run(rest, buffer) {
       const [flags, ...args] = words(rest);
       const channel = channelOf(buffer);
@@ -174,7 +250,7 @@ export const COMMANDS = {
   },
 };
 
-const ALIASES = { j: 'join', leave: 'part', q: 'query', w: 'whois', signout: 'quit', logout: 'quit' };
+const ALIASES = { j: 'join', leave: 'part', q: 'query', w: 'whois', signout: 'quit', logout: 'quit', pol: 'poll' };
 
 /**
  * Handles one line from the composer.

@@ -28,13 +28,20 @@ export function fakeConn() {
   return conn;
 }
 
-/** A hub on an in-memory database, with a clock the test controls. */
+/** Plain Swarm: every school rule switched off. */
+export const OPEN = { guestsNeedCode: false, onlyTeachersCreate: false, autoCode: false, studentDms: true, privateList: false };
+
+/**
+ * A hub on an in-memory database, with a clock the test controls. Without a
+ * `school` of its own it runs as plain Swarm, which is what the suites
+ * inherited from upstream expect.
+ */
 export function makeHub(config = {}, store = new Store(':memory:')) {
   const clock = { t: 1_700_000_000_000 };
   const hub = new Hub({
     store,
     now: () => clock.t,
-    config: { graceMs: 0, messageBurst: 1000, ...config },
+    config: { graceMs: 0, messageBurst: 1000, school: OPEN, ...config },
   });
   const login = async (nick, options = {}) => {
     const conn = fakeConn();

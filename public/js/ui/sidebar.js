@@ -48,7 +48,7 @@ function group(label, buffers, action) {
     'section.nav-group',
     null,
     h('div.nav-heading', null, h('h2', null, label), action),
-    buffers.length ? buffers.map((buffer) => row(buffer)) : h('p.nav-empty', null, label === 'Channels' ? 'No channels yet.' : 'Nobody yet.'),
+    buffers.length ? buffers.map((buffer) => row(buffer)) : h('p.nav-empty', null, label === 'Classes' ? (app.self.teacher ? 'Open your first class with the plus.' : 'Join a class with its code.') : 'Nobody yet.'),
   );
 }
 
@@ -57,11 +57,12 @@ function selfMenu(anchor) {
   menu(
     anchor,
     [
-      { heading: self.nick, detail: self.registered ? 'registered' : 'guest' },
+      { heading: self.nick, detail: self.teacher ? 'teacher' : self.registered ? 'registered' : 'guest' },
       self.away
         ? { label: 'Come back', run: () => app.run('away', { message: null }) }
         : { label: 'Set away', run: () => app.run('away', { message: 'Away' }) },
-      !self.registered && { label: 'Register this nick…', run: () => app.emit('compose', { prefill: '/register ' }) },
+      !self.registered && { label: 'Keep this name…', run: () => app.emit('compose', { prefill: '/register ' }) },
+      self.registered && !self.teacher && app.server.rules?.teacherCode && { label: 'I am a teacher…', run: () => app.emit('compose', { prefill: '/teacher ' }) },
       { label: 'Change nick…', run: () => app.emit('compose', { prefill: '/nick ' }) },
       null,
       {
@@ -102,7 +103,7 @@ function render() {
     h(
       'nav.nav',
       null,
-      group('Channels', app.list('channel'), h('button.icon-button', { type: 'button', title: 'Join a channel', 'aria-label': 'Join a channel', on: { click: () => app.emit('dialog', 'jump') } }, icon('plus'))),
+      group('Classes', app.list('channel'), h('button.icon-button', { type: 'button', title: self.teacher ? 'Open or join a class' : 'Join a class', 'aria-label': self.teacher ? 'Open or join a class' : 'Join a class', on: { click: () => app.emit('dialog', 'jump') } }, icon('plus'))),
       group('Direct messages', app.list('dm'), h('button.icon-button', { type: 'button', title: 'Message someone', 'aria-label': 'Message someone', on: { click: () => app.emit('dialog', 'jump') } }, icon('plus'))),
       h('section.nav-group', null, h('div.nav-heading', null, h('h2', null, 'Server')), row(status, 'Status')),
     ),
@@ -110,7 +111,7 @@ function render() {
       'button.self-row',
       { type: 'button', 'aria-haspopup': 'menu', 'aria-label': `${self.nick}, settings`, on: { click: (event) => selfMenu(event.currentTarget) } },
       h(`span.dot.self${self.away ? '.away' : ''}`),
-      h('span.self-text', null, h('span.self-nick', null, self.nick), h('span.self-state', null, self.away ? `away: ${self.away}` : self.registered ? 'registered' : 'guest')),
+      h('span.self-text', null, h('span.self-nick', null, self.nick), h('span.self-state', null, self.away ? `away: ${self.away}` : self.teacher ? 'teacher' : self.registered ? 'registered' : 'guest')),
       icon('more'),
     ),
   );

@@ -67,6 +67,28 @@ CREATE TABLE IF NOT EXISTS reactions (
   created_at INTEGER NOT NULL,
   PRIMARY KEY (message_id, emoji, nick_key)
 );
+CREATE TABLE IF NOT EXISTS polls (
+  message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,
+  options    TEXT NOT NULL,
+  correct    INTEGER,
+  closed_at  INTEGER
+);
+CREATE TABLE IF NOT EXISTS poll_votes (
+  message_id INTEGER NOT NULL REFERENCES polls(message_id) ON DELETE CASCADE,
+  voter      TEXT NOT NULL,
+  choice     INTEGER NOT NULL,
+  PRIMARY KEY (message_id, voter)
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id         INTEGER PRIMARY KEY,
+  channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  reporter   TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  resolved   INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (message_id, reporter)
+);
 CREATE TABLE IF NOT EXISTS dm_reads (
   account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   peer_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -86,6 +108,7 @@ const toAccount = (row) =>
     passwordHash: row.password_hash,
     createdAt: row.created_at,
     lastSeen: row.last_seen,
+    role: row.role ?? null,
   };
 
 /**
@@ -102,6 +125,16 @@ export class Store {
     this.#db = new DatabaseSync(path);
     this.#db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.#db.exec(SCHEMA);
+    // Columns the education edition adds to tables that plain Swarm created.
+    this.#column('accounts', 'role', 'TEXT');
+    this.#column('channels', 'code', 'TEXT');
+    this.#column('channels', 'pinned_id', 'INTEGER');
+    this.#db.exec('CREATE UNIQUE INDEX IF NOT EXISTS channels_by_code ON channels (code)');
+  }
+
+  #column(table, name, type) {
+    const known = this.#db.prepare(`PRAGMA table_info(${table})`).all().some((column) => column.name === name);
+    if (!known) this.#db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
 
   close() {
@@ -157,6 +190,9 @@ export class Store {
   renameAccount(id, nick) {
     this.#run('UPDATE accounts SET nick = ?, nick_key = ? WHERE id = ?', nick, nick.toLowerCase(), id);
   }
+  setAccountRole(id, role) {
+    this.#run('UPDATE accounts SET role = ? WHERE id = ?', role, id);
+  }
   touchAccount(id, now) {
     this.#run('UPDATE accounts SET last_seen = ? WHERE id = ?', now, id);
   }
@@ -197,14 +233,19 @@ export class Store {
       modes: row.modes,
       founderId: row.founder_id,
       createdAt: row.created_at,
+      code: row.code ?? null,
+      pinnedId: row.pinned_id ?? null,
     }));
   }
   loadMemberships() {
     return this.#all(
-      `SELECT m.channel_id, m.account_id, m.role, a.nick
+      `SELECT m.channel_id, m.account_id, m.role, a.nick, a.role AS account_role
          FROM memberships m JOIN accounts a ON a.id = m.account_id
         ORDER BY m.joined_at, m.rowid`,
-    ).map((row) => ({ channelId: row.channel_id, accountId: row.account_id, role: row.role, nick: row.nick }));
+    ).map((row) => ({
+      channelId: row.channel_id, accountId: row.account_id, role: row.role, nick: row.nick,
+      teacher: row.account_role === 'teacher',
+    }));
   }
   loadBans() {
     return this.#all('SELECT channel_id, nick_key, account_id FROM bans').map((row) => ({
@@ -225,6 +266,12 @@ export class Store {
   }
   updateTopic(id, topic, by, at) {
     this.#run('UPDATE channels SET topic = ?, topic_by = ?, topic_at = ? WHERE id = ?', topic, by, at, id);
+  }
+  setChannelCode(id, code) {
+    this.#run('UPDATE channels SET code = ? WHERE id = ?', code, id);
+  }
+  setPinned(id, messageId) {
+    this.#run('UPDATE channels SET pinned_id = ? WHERE id = ?', messageId, id);
   }
   updateModes(id, modes) {
     this.#run('UPDATE channels SET modes = ? WHERE id = ?', modes, id);
@@ -280,6 +327,7 @@ export class Store {
       dmB: row.dm_b,
       nick: row.nick,
       accountId: row.account_id,
+      kind: row.kind,
       deleted: row.deleted === 1,
     };
   }
@@ -388,6 +436,93 @@ export class Store {
        ON CONFLICT (account_id, peer_id) DO UPDATE SET last_read = MAX(last_read, excluded.last_read)`,
       accountId, peerId, id,
     );
+  }
+
+  // ---- polls ----
+
+  createPoll({ messageId, kind, options, correct = null }) {
+    this.#run(
+      'INSERT INTO polls (message_id, kind, options, correct) VALUES (?, ?, ?, ?)',
+      messageId, kind, JSON.stringify(options), correct,
+    );
+  }
+  /** @returns {Map<number, object>} the polls behind the given messages */
+  polls(messageIds) {
+    const found = new Map();
+    if (!messageIds.length) return found;
+    const rows = this.#db.prepare(`SELECT * FROM polls WHERE message_id IN (${marks(messageIds)})`).all(...messageIds);
+    for (const row of rows) {
+      found.set(row.message_id, {
+        messageId: row.message_id,
+        kind: row.kind,
+        options: JSON.parse(row.options),
+        correct: row.correct,
+        closedAt: row.closed_at,
+        votes: new Map(),
+      });
+    }
+    const votes = this.#db
+      .prepare(`SELECT message_id, voter, choice FROM poll_votes WHERE message_id IN (${marks(messageIds)})`)
+      .all(...messageIds);
+    for (const vote of votes) found.get(vote.message_id)?.votes.set(vote.voter, vote.choice);
+    return found;
+  }
+  setVote(messageId, voter, choice) {
+    this.#run(
+      `INSERT INTO poll_votes (message_id, voter, choice) VALUES (?, ?, ?)
+       ON CONFLICT (message_id, voter) DO UPDATE SET choice = excluded.choice`,
+      messageId, voter, choice,
+    );
+  }
+  closePoll(messageId, now) {
+    this.#run('UPDATE polls SET closed_at = ? WHERE message_id = ? AND closed_at IS NULL', now, messageId);
+  }
+
+  // ---- reports ----
+
+  /** @returns {number|null} the report's id, or null when this person already reported the message */
+  addReport(channelId, messageId, reporter, now) {
+    const { changes, lastInsertRowid } = this.#run(
+      'INSERT OR IGNORE INTO reports (channel_id, message_id, reporter, created_at) VALUES (?, ?, ?, ?)',
+      channelId, messageId, reporter, now,
+    );
+    return changes ? Number(lastInsertRowid) : null;
+  }
+  openReports(channelId) {
+    return this.#all(
+      'SELECT id, message_id, reporter, created_at FROM reports WHERE channel_id = ? AND resolved = 0 ORDER BY id',
+      channelId,
+    ).map((row) => ({ id: row.id, messageId: row.message_id, by: row.reporter, at: row.created_at }));
+  }
+  report(id) {
+    const row = Number.isInteger(id) ? this.#get('SELECT * FROM reports WHERE id = ?', id) : null;
+    return row && { id: row.id, channelId: row.channel_id, messageId: row.message_id, resolved: row.resolved === 1 };
+  }
+  resolveReport(id) {
+    this.#run('UPDATE reports SET resolved = 1 WHERE id = ?', id);
+  }
+  resolveReportsFor(messageId) {
+    return this.#run('UPDATE reports SET resolved = 1 WHERE message_id = ? AND resolved = 0', messageId).changes;
+  }
+
+  // ---- a class at a glance ----
+
+  /** Who said how much, most talkative first. Deleted messages do not count. */
+  participation(channelId) {
+    return this.#all(
+      `SELECT nick, COUNT(*) AS messages, MAX(created_at) AS last_at
+         FROM messages WHERE channel_id = ? AND deleted = 0
+        GROUP BY nick ORDER BY messages DESC, nick`,
+      channelId,
+    ).map((row) => ({ nick: row.nick, messages: row.messages, lastAt: row.last_at }));
+  }
+  /** The latest `limit` messages, oldest first, for a transcript. */
+  transcript(channelId, limit) {
+    return this.#all(
+      `SELECT nick, kind, text, created_at FROM messages
+        WHERE channel_id = ? AND deleted = 0 ORDER BY id DESC LIMIT ?`,
+      channelId, limit,
+    ).reverse().map((row) => ({ nick: row.nick, kind: row.kind, text: row.text, ts: row.created_at }));
   }
 
   /**

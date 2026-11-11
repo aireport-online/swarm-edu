@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Swarm</title>
+  <title>Swarm Edu</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/school.css">
   <script type="module" src="/js/main.js"></script>
 </head>
 <body>
@@ -14,21 +15,29 @@
     <canvas class="login-flock" id="login-flock" aria-hidden="true"></canvas>
     <div class="login-panel">
       <p class="brand"><span class="brand-name">Swarm</span></p>
-      <h1>Pick a nick.<br>Join the flock.</h1>
-      <p class="login-lead">Channels, nicks and slash commands, with history that waits for you.</p>
+      <h1>Join your class.</h1>
+      <p class="login-lead">Type your name and the code your teacher put on the board.</p>
       <form id="login-form" autocomplete="on" novalidate>
         <div class="segmented" role="radiogroup" aria-label="How to connect">
-          <label><input type="radio" name="mode" value="guest" checked><span>Guest</span></label>
+          <label><input type="radio" name="mode" value="guest" checked><span>Join a class</span></label>
           <label><input type="radio" name="mode" value="signin"><span>Sign in</span></label>
           <label><input type="radio" name="mode" value="register"><span>Register</span></label>
         </div>
         <label class="field">
-          <span>Nick</span>
+          <span id="nick-label">Your name</span>
           <input name="nick" type="text" required minlength="2" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false">
+        </label>
+        <label class="field" id="code-field">
+          <span>Class code</span>
+          <input class="code-input" name="code" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC234">
         </label>
         <label class="field" id="password-field" hidden>
           <span>Password</span>
           <input name="password" type="password" minlength="8" maxlength="200" autocomplete="current-password">
+        </label>
+        <label class="field" id="staff-field" hidden>
+          <span>Staff code <small>teachers only</small></span>
+          <input name="staff" type="password" maxlength="200" autocomplete="off">
         </label>
         <p class="login-hint" id="login-hint"></p>
         <p class="login-error" id="login-error" role="alert" hidden></p>
@@ -42,6 +51,7 @@
     <aside class="sidebar" id="sidebar" aria-label="Conversations"></aside>
     <section class="main">
       <header class="topbar" id="topbar"></header>
+      <div class="pinned" id="pinned" hidden></div>
       <div class="log" id="log" role="log" tabindex="0" aria-label="Messages"></div>
       <button class="jump-latest" id="jump-latest" type="button" hidden>New messages</button>
       <p class="typing" id="typing" aria-live="polite"></p>
@@ -59,6 +69,6 @@
   </div>
 
   <div id="layer"></div>
-  <noscript><p class="noscript">Swarm needs JavaScript in the browser. Any IRC client works without it.</p></noscript>
+  <noscript><p class="noscript">Swarm Edu needs JavaScript in the browser. Any IRC client works without it.</p></noscript>
 </body>
 </html>

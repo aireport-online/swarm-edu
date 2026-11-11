@@ -42,6 +42,16 @@ const ICONS = {
   send: 'M5 12h13M12 6l6 6-6 6',
   more: 'M6 12h.010M12 12h.010M18 12h.010',
   back: 'M15 6l-6 6 6 6',
+  hand: 'M8 13V5.500a1.500 1.500 0 0 1 3 0V11M11 5V4a1.500 1.500 0 0 1 3 0v7M14 5.500a1.500 1.500 0 0 1 3 0V12M17 8.500a1.500 1.500 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.500a6 6 0 0 1-5-2.700l-3-4.600a1.500 1.500 0 0 1 2.400-1.800L8 14',
+  poll: 'M5 20V10M12 20V4M19 20v-7',
+  pin: 'M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5',
+  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  quiet: 'M4 9v6h4l5 4V5L8 9H4zM17 9l4 6M21 9l-4 6',
+  sound: 'M4 9v6h4l5 4V5L8 9H4zM17 9a4 4 0 0 1 0 6',
+  board: 'M4 5h16v11H4zM9 20h6M12 16v4',
+  lock: 'M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z',
+  copy: 'M9 9h10v11H9zM5 15V4h10',
+  download: 'M12 4v11M7 11l5 5 5-5M5 20h14',
 };
 
 export function icon(name, size = 16) {
