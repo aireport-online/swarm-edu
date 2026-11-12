@@ -221,15 +221,9 @@ npm run dev
 ### Staying close to Swarm
 
 This repository is a fork: `main` started as Swarm's history, and the
-education edition is built on top of it. To keep taking changes from upstream:
-
-```bash
-git remote add upstream https://github.com/aireport-online/swarm
-```
-
-```bash
-git fetch upstream
-```
+education edition is built on top of it. The original Swarm repository is
+private and is not part of this public selection. This repository includes
+the source needed to work with the education edition on its own.
 
 The classroom is written to merge cleanly. New behaviour sits behind the
 `school` settings of the hub, and the suites inherited from Swarm
