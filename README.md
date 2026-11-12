@@ -1,9 +1,18 @@
 # Swarm Edu
 
-[Swarm](https://github.com/aireport-online/swarm), a modern take on IRC, made
+## About this publication
+
+This source code accompanies the AI Report masterclass on building software with AI.
+You can study, run, fork and adapt the project under the [MIT license](LICENSE).
+It is a masterclass example project; no hosted service or ongoing maintenance is offered.
+
+Swarm, a modern take on IRC, made
 for the classroom. A teacher opens a class and puts its code on the board;
 students type their name and the code and are in. No accounts to hand out, no
 app to install, and any IRC client still works.
+
+The original Swarm repository is not included in this public selection. This
+repository contains the source needed for the education version.
 
 ![A lesson in #history-3b, seen by the teacher](docs/school/teacher.webp)
 
